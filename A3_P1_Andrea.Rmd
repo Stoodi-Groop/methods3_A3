@@ -134,7 +134,7 @@ newdata <- data %>%
    
 
 demo <- read.csv("DemographicData.csv", sep = ";")
-
+hej
 
                       
 # aggregate(V1~filename,data,mean)
