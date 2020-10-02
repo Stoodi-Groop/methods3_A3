@@ -161,17 +161,18 @@ data$V2 <- as.numeric(paste(data$V2))
 #removing NA's
 data <- na.omit(data)
 
-#renaming the coloumn in articulation data
-artdata <- artdata  %>% 
-    rename(filename = soundname)
 
 #adding descriptors for pitch
 data$filename <- as.factor(data$filename)
 newdata <- data %>%
   group_by(filename) %>% 
-    summarize(meanf0 = mean(V2), 
-              sdf0 = sd(V2),
-              IQRf0 = IQR(V2))
+    summarize(meanPitch = mean(V2), 
+              sdPitch = sd(V2), 
+              IQRPitch = IQR(V2), 
+              medianPitch = median(V2),
+              madPitch = mad(V2), 
+              maxPitch = max(V2), 
+              minPitch = min(V2))
 
 
 #making function that extracts the designated characters from the filename for a dataframe
@@ -185,8 +186,27 @@ newdata <- newdata %>%
     mutate(Participant = extract_info(newdata, 10, 12), 
            Study = extract_info(newdata, 6, 6), 
            Trial = extract_info(newdata, 14, 15),
-           Diagnosis = extract_info(newdata, 14, 14),
+           Diagnosis = extract_info(newdata, 8, 8),
            Trial = str_replace(Trial, "_", ""))
+
+#renaming the coloumn in articulation data
+artdata <- artdata  %>% 
+    rename(filename = soundname)
+
+artdata <- artdata %>%  
+    mutate(Participant = extract_info(artdata, 10, 12), 
+           Study = extract_info(artdata, 6, 6), 
+           Trial = extract_info(artdata, 14, 15),
+           Diagnosis = extract_info(artdata, 8, 8),
+           Trial = str_replace(Trial, "_", ""))
+
+demo <- demo %>%
+    mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1"))
+
+#making participant factor
+demo$Participant <- as.factor(demo$Participant)
+newdata$Participant <- as.factor(newdata$Participant)
+artdata$Participant <- as.factor(artdata$Participant)
 
 
 ```
@@ -202,6 +222,14 @@ newdata <- newdata %>%
 # Finally the pitch data
 
 # Now we merge them
+df <- merge(newdata, demo)
+
+artdata <- artdata[ , -1]
+df <- merge(df,artdata)
+
+#removing non-danish studies
+df <- df %>%
+    filter(Study != 5)
 
 # Now we save them
 
