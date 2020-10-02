@@ -148,17 +148,24 @@ for (n in 1:length(pitch_data)) {
 ```
 
 ```{r}
+#loading data
 data <- read.csv("port3_part1_data.csv", header = T)
 data = data[-1,]
-
 demo <- read.csv("DemographicData.csv", sep = ";")
 artdata <- read.delim("Articulation.txt", sep = ",")
 
+#making pitch and time nuemric
 data$V1 <- as.numeric(paste(data$V1))
 data$V2 <- as.numeric(paste(data$V2))
 
+#removing NA's
 data <- na.omit(data)
 
+#renaming the coloumn in articulation data
+artdata <- artdata  %>% 
+    rename(filename = soundname)
+
+#adding descriptors for pitch
 data$filename <- as.factor(data$filename)
 newdata <- data %>%
   group_by(filename) %>% 
@@ -166,19 +173,22 @@ newdata <- data %>%
               sdf0 = sd(V2),
               IQRf0 = IQR(V2))
 
-subdata <- newdata[1:20, 1:7]
 
-subject <- substr(newdata$filename[1:length(newdata$filename)], 10, 12)
-newdata$Participant <- subject
+#making function that extracts the designated characters from the filename for a dataframe
+extract_info <- function(df, start, stop) {
+    info <- substr(df$filename[1:length(df$filename)], start, stop)
+    return(info)
+}
 
-study <- substr(newdata$filename[1:length(newdata$filename)], 6, 6)
-newdata$Study <- study
+#extracting the information needed
+newdata <- newdata %>%
+    mutate(Participant = extract_info(newdata, 10, 12), 
+           Study = extract_info(newdata, 6, 6), 
+           Trial = extract_info(newdata, 14, 15),
+           Diagnosis = extract_info(newdata, 14, 14),
+           Trial = str_replace(Trial, "_", ""))
 
-diagnosis <- substr(newdata$filename[1:length(newdata$filename)], 8, 8)
-newdata$Diagnosis <- diagnosis
 
-trial <- substr(newdata$filename[1:length(newdata$filename)], 14, 14)
-newdata$Trial <- trial
 ```
 
 
