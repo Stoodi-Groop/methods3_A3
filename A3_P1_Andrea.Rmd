@@ -110,20 +110,8 @@ library(tidyverse)
 
 singlepitch <- read.delim("Pitch/Study1D0S101T1_f0.txt")
 ?summarise
-read_pitch <- function(filename) {
-    # load data
-    
-    # parse filename to extract study, diagnosis, subject and trial
-    
-    # extract pitch descriptors (mean, sd, iqr, etc)
-    
-    # combine all this data in one dataset
-    return(data)
-}
 
-# # test it on just one file while writing the function
-# test_data = read_pitch("Pitch/a_file_to_test.txt")
-# 
+
 # # when you've created a function that works, you can
 # #pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
 #     purrr::map_df(read_pitch)
@@ -141,11 +129,11 @@ data <- na.omit(data)
 data$filename <- as.factor(data$filename)
 newdata <- data %>%
   group_by(filename) %>% 
-    summarize(meanTime=mean(V1), meanf0 = mean(V2), sdTime = sd(V1), sdf0 = sd(V2), IQRTime = IQR(V1), IQRf0 = IQR(V2))
+    summarize(meanPitch = mean(V2), sdPitch = sd(V2), IQRPitch = IQR(V2), medianPitch = median(V2),
+              madPitch = mad(V2), maxPitch = max(V2), minPitch = min(V2))
    
 
-
-
+demo <- read.csv("DemographicData.csv", sep = ";")
 
 
                       
