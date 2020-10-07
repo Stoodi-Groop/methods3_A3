@@ -109,53 +109,70 @@ See placeholder code here for help.
 ```{r}
 library(tidyverse)
 
+singlefile <- read.delim("Pitch/Study1D0S101T1_f0.txt")
 
-# CODE FOR LOADING THE DATA - COMMENTED OUT BECAUSE IT TAKES YEARS TO PROCESS 
-
-
-#pitch_data = list.files(path = "Pitch/",pattern = ".txt")
-
-#datalist <- NULL
-
-#p <- "Pitch/"
-
-#for (n in 1:length(pitch_data)) {
-   # d <- read.table(paste0(p, pitch_data[n]))
-    #d$filename <- pitch_data[n]
-    #datalist <- rbind(datalist, d)
-    #}
-
-
-#write.csv(datalist, file = "port3_part1_data.csv")
-```
+    
+    
+#read_pitch <- function(filename) {
+    # load data
+    
+    
+    # parse filename to extract study, diagnosis, subject and trial
+    
+    # extract pitch descriptors (mean, sd, iqr, etc)
+    
+    # combine all this data in one dataset
+    #return(data)
+#}
 
 
-```{r}
-#loading data
-data <- read.csv("port3_part1_data.csv", header = T) 
 
-#Removing first row, because it's  header
-data = data[-1,]
+# test it on just one file while writing the function
+#test_data = read.table("Pitch/Study1D0S101T1_f0.txt")
 
-#changing to numeric 
+# when you've created a function that works, you can
+# pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
+#     purrr::map_df(read_pitch)
+# 
+# write_csv(pitch_data, ...)
+
+
+#instead of the above:
+#code with help from Byurakn
+# pitch_data = list.files(path = "Pitch/",pattern = ".txt")
+# 
+# datalist <- NULL
+# 
+# p <- "Pitch/"
+# 
+# for (n in 1:length(pitch_data)) {
+#     d <- read.table(paste0(p, pitch_data[n]))
+#     d$filename <- pitch_data[n]
+#     datalist <- rbind(datalist, d)
+#     }
+
+#datalist as csv
+
+#load data from the above loop
+data <- read.csv("port3_part1_data.csv", header = T)
+data = data[-1,] #remove first row (functions as extra header)
+
+#make into numeric (paste is used to not change the exact numbers)
 data$V1 <- as.numeric(paste(data$V1))
 data$V2 <- as.numeric(paste(data$V2))
 
-#Removing NAs
-data <- na.omit(data)
+#remove na
+data <- na.omit(data) 
 
-
-
-#Making filename a factor 
+#filename as factor
 data$filename <- as.factor(data$filename)
 
-#Making the new columns 
+#grouping dependent on filename, summarize different pitch variables
 newdata <- data %>%
   group_by(filename) %>% 
     summarize(meanPitch = mean(V2), sdPitch = sd(V2), IQRPitch = IQR(V2), medianPitch = median(V2),
               madPitch = mad(V2), maxPitch = max(V2), minPitch = min(V2))
-
-
+  
 
 #making function that extracts the designated characters from the filename for a dataframe
 extract_info <- function(df, start, stop) {
@@ -163,7 +180,7 @@ extract_info <- function(df, start, stop) {
     return(info)
 }
 
-#extracting the information needed
+#extracting the information needed from filename into own columns
 newdata <- newdata %>%
     mutate(Participant = extract_info(newdata, 10, 12), 
            Study = extract_info(newdata, 6, 6), 
@@ -173,6 +190,35 @@ newdata <- newdata %>%
 
 
 
+#collecting subject names
+# subject <- substr(newdata$filename[1:length(newdata$filename)], 10, 12)
+# newdata$Participant <- subject
+
+#read in the demographic data 
+demo <- read.csv("DemographicData.csv", sep = ";")
+
+#rename diagnosis to 0 and 1
+demo <- demo %>%
+    mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1")) 
+
+artdata <- read.delim("Articulation.txt", sep = ",")
+
+
+
+#rename the column soundname to filename in accordance with the other dataframe
+artdata <- artdata  %>% 
+    rename(filename = soundname) 
+
+#extracting the information needed from filename into own columns
+artdata <- artdata %>%  
+    mutate(Participant = extract_info(artdata, 10, 12), 
+           Study = extract_info(artdata, 6, 6), 
+           Trial = extract_info(artdata, 14, 15),
+           Diagnosis = extract_info(artdata, 8, 8),
+           Trial = str_replace(Trial, "_", ""))
+
+#remove first column
+artdata = artdata[,-1]
 
 ```
 
@@ -180,50 +226,18 @@ newdata <- newdata %>%
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
-# Let's start with the demographic and clinical data
 
-demo <- read.csv("DemographicData.csv", sep = ";")
-
-#Changing Dianosis to 0 = control and 1 = schizophrenia
-demo <- demo %>%
-    mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1"))
-
-art <- read.delim("Articulation.txt", sep = ",")
-
-# then duration data
-
-# Finally the pitch data
-
-
-
-# Now we merge them
-
-#Renaming coloumn name in art
-art <- art  %>% 
-    rename(filename = soundname)
-
-art <- art %>%  
-    mutate(Participant = extract_info(art, 10, 12), 
-           Study = extract_info(art, 6, 6), 
-           Trial = extract_info(art, 14, 15),
-           Diagnosis = extract_info(art, 8, 8),
-           Trial = str_replace(Trial, "_", ""))
-
-art <- art[ , -1]
-df <- merge(df,art)
-
+#make participants as factor
 newdata$Participant <- as.factor(newdata$Participant)
 demo$Participant <- as.factor(demo$Participant)
-art$Participant <- as.factor(art$Participant)
-
-df <- merge(newdata, demo)
-df <- merge(df,art)
-# Now we save them
-```
 
 
-```{r}
-df <- df %>% filter(df$Study != 5)
+#merge dataframe 
+df <- merge(newdata,demo)
+df <- merge(df,artdata)
+
+#filter out study 5
+df <- filter(df, df$Study != 5)
 
 ```
 
