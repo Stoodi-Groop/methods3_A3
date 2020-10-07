@@ -238,18 +238,50 @@ Describe the acoustic profile of a schizophrenic voice
 
 N.B. the meta-analytic findings are on scaled measures. If you want to compare your results with them, you need to scale your measures as well: subtract the mean, and divide by the standard deviation.
 N.N.B. We want to think carefully about fixed and random effects in our model. In particular: how should study be included? Does it make sense to have all studies put together? Does it make sense to analyze both languages together? Relatedly: does it make sense to scale all data from all studies together?
-N.N.N.B. If you want to estimate the studies separately, you can try this syntax:  Feature ~ 0 + Study + Study:Diagnosis + [your randomEffects]. Now you'll have an intercept per each study (the estimates for the controls) and an effect of diagnosis per each study
+N.N.N.B. If you want to estimate the studies separately, you can try this syntax: Feature ~ 0 + Study + Study:Diagnosis + [your randomEffects]. Now you'll have an intercept per each study (the estimates for the controls) and an effect of diagnosis per each study
 
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
+Scaling all our measures
 ```{r}
-   set.seed(1)
-   x <- runif(7)
+library(lme4)
+library(lmerTest)
+#phonationtime = duration of the recording where speech is present
+#speech rate  
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
+# pause duration = (ndur - phonationtime / npause)
+# speechrate= speechrate 
+# proportion of spoken time = phonationtime
+# pitch variability = sdPitch
+  
 
-   scale(x)
+df$ndur <- as.numeric(df$dur..s.)
+df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
+df$npause <- as.numeric(df$npause)
+   
+   
+df <- df %>%  #mutating the four measures used in the models
+    mutate(speech_rate_scaled = (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
+           proportion_spoken_time_scaled =(df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
+           Pitch_variability_scaled = (df$sdPitch - mean(df$sdPitch)) / sd(df$sdPitch))
+        
+
+#preparing for sclaed pause duration column
+     set.seed(1)
+z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+ (z - mean(z)) / sd(z)
+  scale_pause_dur <- scale(z)
+scale_pause_dur
+
+df<-cbind(df, scale_pause_dur = scale_pause_dur)
+```
+
+Making the models
+```{r}
+m1 <- speech_rate_scaled ~ 0 + Study*Diagnosis + Age + Gender + (1|Participant)
+m2 <- proportion_spoken_time_scaled ~ 0 + Study*Diagnosis + Age + Gender + (1|Participant)
+m3 <- Pitch_variability_scaled ~ 0 + Study*Diagnosis + Age + Gender + (1|Participant)
+m4 <- scale_pause_dur ~ 0 + Study*Diagnosis + Age + Gender + (1|Participant)
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
