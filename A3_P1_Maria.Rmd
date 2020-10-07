@@ -333,12 +333,17 @@ df$npause <- as.numeric(df$npause)
    z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
    æ <- runif(df$speechrate..nsyll.dur.)
    
-    
 
    # Manually scaling
+   (x - mean(x)) / sd(x)
+   (y - mean(y)) / sd(y)
    (z - mean(z)) / sd(z)
+   (æ - mean(æ)) / sd(æ)
 
+   scale(x)
+   scale(y)
    scale(z)
+   scale(æ)
    
    
 ```
