@@ -107,7 +107,7 @@ Only then (when everything works) turn the code into a function and use map_df()
 See placeholder code here for help.
 
 ```{r}
-library(tidyverse)
+library(tidyverse, lme4)
 
 read_pitch <- function(filename) {
     # load data
@@ -231,6 +231,7 @@ df <- merge(df,artdata)
 df <- df %>%
     filter(Study != 5)
 
+df$ID <- paste0(df$Participant, df$Diagnosis)
 # Now we save them
 #write.csv(df, "clean_port3_data.csv")
 
@@ -258,11 +259,13 @@ df %>%
   split(df$Diagnosis) %>% 
   map(summary)
 
+#dividing into stidues
 study1 <- df %>% 
   filter(Study == 1)
 study2 <- df %>% 
   filter(Study == 2)
 
+#summarizing
 study1 %>% 
   split(study1$Diagnosis) %>% 
   map(summary)
@@ -270,10 +273,22 @@ study2 %>%
   split(study2$Diagnosis) %>% 
   map(summary)
 
+1#making schizo and control dataframes
 scz <- df %>% 
   filter(Diagnosis == 1)
+control <- df %>% 
+  filter(Diagnosis == 0)
 
-unique(df$Participant)
+#descriptive stats
+sd(control$Age)
+sd(scz$Age)
+sd(scz$SANS)
+sd(scz$SAPS)
+sd(scz$TotalIQ)
+sd(control$TotalIQ)
+
+#looking at nr of participants 
+unique(df$ID)
 ```
 
 ```{r}
@@ -286,7 +301,7 @@ ggplot(scz, aes(x = Study, y = SAPS, color = Diagnosis)) +
   geom_boxplot() + 
   theme_minimal()
 
-ggplot(df, aes(x = Diagnosis, y = NonVerbalIQ, color = Diagnosis)) +
+ggplot(df, aes(x = Diagnosis, y = TotalIQ, color = Diagnosis)) +
   geom_boxplot() + 
   facet_wrap(~Study) + 
   theme_bw()
@@ -305,9 +320,45 @@ Describe the acoustic profile of a schizophrenic voice
 *Note* in this section you need to describe the acoustic profile of a schizophrenic voice and compare it with the meta-analytic findings (see 2 and 3 in overview of part 1).
 
 ```{r}
+df$ndur <- as.numeric(df$dur..s.)
+df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
+df$npause <- as.numeric(df$npause)
+   
+#scaling the measures
+df <- df %>%  #mutating the four measures used in the models
+    mutate(speech_rate_scaled = 
+             (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
+           proportion_spoken_time_scaled =
+             (df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
+           Pitch_variability_scaled = 
+             (df$sdPitch - mean(df$sdPitch)) / sd(df$sdPitch))
+        
+
+#preparing for scaled pause duration column
+     set.seed(1)
+z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+ (z - mean(z)) / sd(z)
+  scale_pause_dur <- scale(z)
+scale_pause_dur
+
+df<-cbind(df, scale_pause_dur = scale_pause_dur)
+   
 
 ```
 
+```{r}
+#making models
+m1 <- lme4::lmer(speech_rate_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m2 <- lme4::lmer(proportion_spoken_time_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m3 <- lme4::lmer(Pitch_variability_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m4 <- lme4::lmer(scale_pause_dur ~ 0 + Study*Diagnosis + (1|ID), df)
+
+summary(m1)
+summary(m2)
+summary(m3)
+summary(m4)
+
+```
 
 N.B. the meta-analytic findings are on scaled measures. If you want to compare your results with them, you need to scale your measures as well: subtract the mean, and divide by the standard deviation.
 N.N.B. We want to think carefully about fixed and random effects in our model. In particular: how should study be included? Does it make sense to have all studies put together? Does it make sense to analyze both languages together? Relatedly: does it make sense to scale all data from all studies together?
