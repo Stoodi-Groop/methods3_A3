@@ -232,6 +232,7 @@ df <- df %>%
     filter(Study != 5)
 
 # Now we save them
+#write.csv(df, "clean_port3_data.csv")
 
 ```
 
@@ -243,8 +244,54 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+df <- read.csv("clean_port3_data.csv", header = T)
 
+#removing NA's - only study 1 and 2 remain
+df <- na.omit(df)
+
+#making diagnosis factor
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$Study <- as.factor(df$Study)
+
+#comparing the two groups 
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary)
+
+study1 <- df %>% 
+  filter(Study == 1)
+study2 <- df %>% 
+  filter(Study == 2)
+
+study1 %>% 
+  split(study1$Diagnosis) %>% 
+  map(summary)
+study2 %>% 
+  split(study2$Diagnosis) %>% 
+  map(summary)
+
+scz <- df %>% 
+  filter(Diagnosis == 1)
+
+unique(df$Participant)
 ```
+
+```{r}
+#trying to plot
+ggplot(scz, aes(x = Study, y = SANS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+ggplot(scz, aes(x = Study, y = SAPS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+ggplot(df, aes(x = Diagnosis, y = NonVerbalIQ, color = Diagnosis)) +
+  geom_boxplot() + 
+  facet_wrap(~Study) + 
+  theme_bw()
+```
+
 
 ## Now we can analyze the data
 If you were to examine the meta analysis you would find that the differences (measured as Hedges' g, very close to Cohen's d, that is, in standard deviations) to be the following
@@ -256,6 +303,11 @@ If you were to examine the meta analysis you would find that the differences (me
 We need therefore to set up 4 models to see how well our results compare to the meta-analytic findings (Feel free of course to test more features)
 Describe the acoustic profile of a schizophrenic voice
 *Note* in this section you need to describe the acoustic profile of a schizophrenic voice and compare it with the meta-analytic findings (see 2 and 3 in overview of part 1).
+
+```{r}
+
+```
+
 
 N.B. the meta-analytic findings are on scaled measures. If you want to compare your results with them, you need to scale your measures as well: subtract the mean, and divide by the standard deviation.
 N.N.B. We want to think carefully about fixed and random effects in our model. In particular: how should study be included? Does it make sense to have all studies put together? Does it make sense to analyze both languages together? Relatedly: does it make sense to scale all data from all studies together?
