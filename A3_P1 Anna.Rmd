@@ -212,7 +212,7 @@ demo<-na.omit(demo)
 demo<-demo[rep(seq_len(nrow(demo)), each = 10), ] #multiplying the rows 10 times for merge
 
 
-# then duration data
+# then duration data:
 dur<-read.delim("Articulation.txt", sep=",")
 
 dur <- dur  %>% 
