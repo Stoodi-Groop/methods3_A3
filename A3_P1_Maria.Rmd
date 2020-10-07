@@ -264,9 +264,11 @@ df %>%
   split(df$Diagnosis) %>% 
   map(summary)
 
-#divide into studies
-study1 <- filter(df, Study == 1)
-study2 <- filter(df, Study == 2)
+#filter to divide into studies
+study1 <- df %>% 
+  filter(Study == 1)
+study2 <- df %>% 
+  filter(Study == 2)
 
 #describe our sample by diagnosis groups and study
 study1 %>% 
@@ -276,6 +278,28 @@ study1 %>%
 study2 %>% 
   split(df$Diagnosis) %>% 
   map(summary)
+
+#plotting these things
+scz <- df %>% 
+  filter(Diagnosis == 1)
+
+unique(df$Participant)
+
+#SANS
+ggplot(scz, aes(x = Study, y = SANS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+#SAPS
+ggplot(scz, aes(x = Study, y = SAPS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+#NonVerbalIQ
+ggplot(df, aes(x = Diagnosis, y = NonVerbalIQ, color = Diagnosis)) +
+  geom_boxplot() + 
+  facet_wrap(~Study) + 
+  theme_bw()
 
 
 ```
@@ -298,13 +322,25 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
+
+df$ndur <- as.numeric(df$dur..s.)
+df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
+df$npause <- as.numeric(df$npause)
+
    set.seed(1)
-   x <- runif(7)
+   x <- runif(df$sdPitch)
+   y <- runif(df$phonationtime..s.)
+   z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+   æ <- runif(df$speechrate..nsyll.dur.)
+   
+    
 
    # Manually scaling
-   (x - mean(x)) / sd(x)
+   (z - mean(z)) / sd(z)
 
-   scale(x)
+   scale(z)
+   
+   
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
