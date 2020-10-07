@@ -108,10 +108,6 @@ See placeholder code here for help.
 ```{r}
 library(tidyverse)
 
-singlepitch <- read.delim("Pitch/Study1D0S101T1_f0.txt")
-?summarise
-
-
 # # when you've created a function that works, you can
 # #pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
 #     purrr::map_df(read_pitch)
@@ -119,6 +115,8 @@ singlepitch <- read.delim("Pitch/Study1D0S101T1_f0.txt")
 # write_csv(pitch_data, ...)
 
 data <- read.csv("port3_part1_data.csv", header = T)
+demo <- read.csv("DemographicData.csv", sep = ";")
+artdata <- read.delim("Articulation.txt", sep = ",")
 data = data[-1,]
 
 data$V1 <- as.numeric(paste(data$V1))
@@ -134,10 +132,41 @@ newdata <- data %>%
    
 
 demo <- read.csv("DemographicData.csv", sep = ";")
-hej
 
-                      
-# aggregate(V1~filename,data,mean)
+#making function that extracts the designated characters from the filename for a dataframe
+extract_info <- function(df, start, stop) {
+    info <- substr(df$filename[1:length(df$filename)], start, stop)
+    return(info)
+}
+
+#extracting the information needed
+newdata <- newdata %>%
+    mutate(Participant = extract_info(newdata, 10, 12), 
+           Study = extract_info(newdata, 6, 6), 
+           Trial = extract_info(newdata, 14, 15),
+           Diagnosis = extract_info(newdata, 8, 8),
+           Trial = str_replace(Trial, "_", ""))
+
+#renaming the coloumn in articulation data
+artdata <- artdata  %>% 
+    rename(filename = soundname)
+
+artdata <- artdata %>%  
+    mutate(Participant = extract_info(artdata, 10, 12), 
+           Study = extract_info(artdata, 6, 6), 
+           Trial = extract_info(artdata, 14, 15),
+           Diagnosis = extract_info(artdata, 8, 8),
+           Trial = str_replace(Trial, "_", ""))
+
+#Control is 0 in diagnosis 
+demo <- demo %>%
+    mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1"))
+
+#making participant factor
+demo$Participant <- as.factor(demo$Participant)
+newdata$Participant <- as.factor(newdata$Participant)
+artdata$Participant <- as.factor(artdata$Participant)
+
 
 ```
 
@@ -152,8 +181,17 @@ hej
 # Finally the pitch data
 
 # Now we merge them
+df <- merge(newdata, demo)
+
+artdata <- artdata[ , -1]
+df <- merge(df,artdata)
+
+#removing non-danish studies
+df <- df %>%
+    filter(Study != 5)
 
 # Now we save them
+
 
 ```
 
@@ -165,6 +203,25 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+#omitting NAs so that we are now only working with study 1 and 2
+df <- na.omit(df)
+
+class(df$Study)
+df %>% 
+  split(df$Diagnosis) %>% 
+    map(summary)
+
+#subsetting study 1 and 2 to get information by Diagnosis
+study1 <- subset(df, Study == 1)
+study2 <- subset(df, Study == 2)
+
+study1 %>% 
+  split(study1$Diagnosis) %>% 
+    map(summary)
+
+study2 %>% 
+  split(study2$Diagnosis) %>% 
+    map(summary)
 
 ```
 
