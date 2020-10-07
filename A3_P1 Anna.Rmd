@@ -319,23 +319,26 @@ pitch variability = sdPitch
 df$ndur <- as.numeric(df$dur..s.)
 df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
 df$npause <- as.numeric(df$npause)
-
-   set.seed(1)
-   x <- runif(df$sdPitch)
-   y <- runif(df$phonationtime..s.)
-   z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
-   æ <- runif(df$speechrate..nsyll.dur.)
    
    
-dfmutated <- df %>%  
+df <- df %>%  #mutating the four measures used in the models
     mutate(speech_rate_scaled = (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
            proportion_spoken_time_scaled =(df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
            Pitch_variability_scaled = df$sdPitch - mean(df$sdPitch) / sd(df$sdPitch))
         
+
+#preparing for sclaed pause duration column
+     set.seed(1)
+z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+ (z - mean(z)) / sd(z)
+  scale_pause_dur <- scale(z)
+scale_pause_dur
+
+df<-cbind(df, scale_pause_dur = scale_pause_dur)
+   
+
   
-
-
-m1<-lmer()
+   m1<-lmer()
 m2<-
 m3<-
 m4<-
