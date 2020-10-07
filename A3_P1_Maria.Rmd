@@ -239,6 +239,7 @@ df <- merge(df,artdata)
 #filter out study 5
 df <- filter(df, df$Study != 5)
 
+
 ```
 
 ## Now we need to describe our sample
@@ -249,6 +250,33 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+
+#remove na (removes a lot but that's what we are told to do)
+df <- df %>% 
+  na.omit
+
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$Study <- as.factor(df$Study)
+df$Trial <- as.factor(df$Trial)
+
+#describe our sample by diagnosis groups
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary)
+
+#divide into studies
+study1 <- filter(df, Study == 1)
+study2 <- filter(df, Study == 2)
+
+#describe our sample by diagnosis groups and study
+study1 %>% 
+  split(df$Diagnosis) %>% 
+  map(summary)
+
+study2 %>% 
+  split(df$Diagnosis) %>% 
+  map(summary)
+
 
 ```
 
