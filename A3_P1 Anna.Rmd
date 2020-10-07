@@ -196,8 +196,6 @@ artdata <- artdata  %>% #renaming filename to participant
     rename(Participant = filename)
 
 
-
-
 ```
 
 
@@ -205,31 +203,43 @@ artdata <- artdata  %>% #renaming filename to participant
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
-# Let's start with the demographic and clinical data
-demo<-read.csv("DemographicData.csv",sep=";")
-demo<-na.omit(demo)
+demo <- read.csv("DemographicData.csv", sep = ";")
 
-demo<-demo[rep(seq_len(nrow(demo)), each = 10), ] #multiplying the rows 10 times for merge
+#Changing Dianosis to 0 = control and 1 = schizophrenia
+demo <- demo %>%
+    mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1"))
 
+art <- read.delim("Articulation.txt", sep = ",")
 
-# then duration data:
-dur<-read.delim("Articulation.txt", sep=",")
-
-dur <- dur  %>% 
-    rename(Participant = soundname)
-
-class(dur$Participant)
-dur$Participant<-as.factor(dur$Participant)
-
-dur<- dur %>% #filename removal of characters
-    mutate(Participant = extract_info(dur, 10, 12))
+# then duration data
 
 # Finally the pitch data
 
+
 # Now we merge them
 
+#Renaming coloumn name in art
+art <- art  %>% 
+    rename(filename = soundname)
 
-# Now we save them
+art <- art %>%  
+    mutate(Participant = extract_info(art, 10, 12), 
+           Study = extract_info(art, 6, 6), 
+           Trial = extract_info(art, 14, 15),
+           Diagnosis = extract_info(art, 8, 8),
+           Trial = str_replace(Trial, "_", ""))
+
+art <- art[ , -1]
+df <- merge(df,art)
+
+newdata$Participant <- as.factor(newdata$Participant)
+demo$Participant <- as.factor(demo$Participant)
+art$Participant <- as.factor(art$Participant)
+
+df <- merge(newdata, demo)
+df <- merge(df,art)
+
+
 
 ```
 
@@ -238,9 +248,33 @@ dur<- dur %>% #filename removal of characters
 First look at the missing data: we should exclude all recordings for which we do not have complete data.
 Then count the participants and recordinsgs by diagnosis, report their gender, age and symptom severity (SANS, SAPS and Social)
 Finally, do the same by diagnosis and study, to assess systematic differences in studies.
-I like to use group_by() %>% summarize() for quick summaries
+I like to usegroup_by() %>% summarize() for quick summaries
+
+
+
 
 ```{r}
+#the data as csv:
+df<-read_csv("clean_port3_data.csv")
+df <- df[ , -1] #removing X1 column
+df<-na.omit(df) #removing
+
+df$Diagnosis<-as.factor(df$Diagnosis)
+
+df %>% 
+  group_by(Diagnosis)%>% tally()
+
+df %>% 
+  group_by(Study, Diagnosis) %>% tally()
+
+
+df$Study<-as.factor(df$Study)
+dfstudy1<-filter(df,Study == "1")
+
+dfstudy1 %>% 
+  group_by(Diagnosis, SANS) %>% tally()
+
+#look at output and output 2. 
 
 ```
 
@@ -260,6 +294,59 @@ N.N.B. We want to think carefully about fixed and random effects in our model. I
 N.N.N.B. If you want to estimate the studies separately, you can try this syntax:  Feature ~ 0 + Study + Study:Diagnosis + [your randomEffects]. Now you'll have an intercept per each study (the estimates for the controls) and an effect of diagnosis per each study
 
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
+
+- soundname: the name of the recording file
+- nsyll: number of syllables automatically inferred from the audio
+- npause: number of pauses automatically inferred from the audio (absence of human voice longer than 200 milliseconds)
+- dur (s): duration of the full recording
+- phonationtime (s): duration of the recording where speech is present
+- speechrate (nsyll/dur): average number of syllables per second
+- articulation rate (nsyll / phonationtime): average number of syllables per spoken second
+- ASD (speakingtime/nsyll): average syllable duration
+
+```{r}
+library(lme4)
+library(lmerTest)
+#phonationtime = duration of the recording where speech is present
+#speech rate  
+
+pause duration = (ndur - phonationtime / npause)
+speechrate= speechrate 
+proportion of spoken time = phonationtime
+pitch variability = sdPitch
+  
+
+df$ndur <- as.numeric(df$dur..s.)
+df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
+df$npause <- as.numeric(df$npause)
+
+   set.seed(1)
+   x <- runif(df$sdPitch)
+   y <- runif(df$phonationtime..s.)
+   z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+   æ <- runif(df$speechrate..nsyll.dur.)
+   
+   
+dfmutated <- df %>%  
+    mutate(speech_rate_scaled = (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
+           proportion_spoken_time_scaled =(df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
+           Pitch_variability_scaled = df$sdPitch - mean(df$sdPitch) / sd(df$sdPitch))
+        
+  
+
+
+m1<-lmer()
+m2<-
+m3<-
+m4<-
+```
+
+
+
+
+# dfmutated <- dfmutated %>%  
+    mutate(pause_duration_scaled = (df$pause_duration - mean(df$pause_duration) / sd(df$pause_duration)))  
+
 
 ```{r}
    set.seed(1)
