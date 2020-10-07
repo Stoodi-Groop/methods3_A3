@@ -342,7 +342,7 @@ df$npause <- as.numeric(df$npause)
 
    scale(x)
    scale(y)
-   scale(z)
+   scale_pause_dur <- scale(z)
    scale(æ)
    
    
