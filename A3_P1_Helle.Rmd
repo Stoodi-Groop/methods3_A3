@@ -190,11 +190,6 @@ demo <- demo %>%
 
 art <- read.delim("Articulation.txt", sep = ",")
 
-# then duration data
-
-# Finally the pitch data
-
-
 
 # Now we merge them
 
@@ -225,6 +220,8 @@ df <- merge(df,art)
 ```{r}
 df <- df %>% filter(df$Study != 5)
 
+
+write.csv(df, "clean_port3_data.csv")
 ```
 
 ## Now we need to describe our sample
