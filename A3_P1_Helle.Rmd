@@ -220,6 +220,7 @@ df <- merge(df,art)
 ```{r}
 df <- df %>% filter(df$Study != 5)
 
+df$ID <- paste0(df$Participant, df$Diagnosis)
 
 write.csv(df, "clean_port3_data.csv")
 ```
@@ -232,6 +233,50 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+#Removing the NAs 
+df <- na.omit(df)
+
+df$Diagnosis <- as.factor(df$Diagnosis)
+
+#Comparing by diagnosis
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary)
+
+
+
+#Splitting by study
+
+study1 <- df %>% 
+  filter(Study == 1)
+study2 <- df %>% 
+  filter(Study == 2)
+
+study1 %>% 
+  split(study1$Diagnosis) %>% 
+  map(summary)
+
+study2 %>% 
+  split(study2$Diagnosis) %>% 
+  map(summary)
+
+
+
+
+#plots
+ggplot(scz, aes(x = Study, y = SANS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+ggplot(scz, aes(x = Study, y = SAPS, color = Diagnosis)) +
+  geom_boxplot() + 
+  theme_minimal()
+
+ggplot(df, aes(x = Diagnosis, y = TotalIQ, color = Diagnosis)) +
+  geom_boxplot() + 
+  facet_wrap(~Study) + 
+  theme_bw()
+
 
 ```
 
@@ -253,14 +298,56 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-   set.seed(1)
-   x <- runif(7)
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
+df$ndur <- as.numeric(df$dur..s.)
+df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
+df$npause <- as.numeric(df$npause)
+   
+   
+df <- df %>%  #mutating the four measures used in the models
+    mutate(speech_rate_scaled = (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
+           proportion_spoken_time_scaled =(df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
+           Pitch_variability_scaled = (df$sdPitch - mean(df$sdPitch)) / sd(df$sdPitch))
+        
 
-   scale(x)
+#preparing for scaled pause duration column
+     set.seed(1)
+z <- runif((df$dur..s.- df$phonationtime..s.)/df$npause)
+ (z - mean(z)) / sd(z)
+  scale_pause_dur <- scale(z)
+scale_pause_dur
+
+df<-cbind(df, scale_pause_dur = scale_pause_dur)
+
 ```
+
+Making the models
+
+
+pitch variability (lower, Hedges' g: -0.55, 95% CIs: -1.06, 0.09)
+- proportion of spoken time (lower, Hedges' g: -1.26, 95% CIs: -2.26, 0.25)
+- speech rate (slower, Hedges' g: -0.75, 95% CIs: -1.51, 0.04)
+- pause duration (longer, Hedges' g: 1.89, 95% CIs: 0.72, 3.21). (Duration - Spoken Duration) / PauseN
+
+```{r}
+
+library(lme4)
+library(lmerTest)
+
+m1 <- lmer(speech_rate_scaled ~ 0 + Study*Diagnosis + (1|ID),df)
+m2 <- lmer(proportion_spoken_time_scaled ~ 0 + Study*Diagnosis +  (1|ID),df)
+m3 <- lmer(Pitch_variability_scaled ~ 0 + Study*Diagnosis +  (1|ID),df)
+m4 <- lmer(scale_pause_dur ~ 0 + Study*Diagnosis +  (1|ID),df)
+
+summary(m1)
+
+
+```
+
+
+
+
+
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
 
