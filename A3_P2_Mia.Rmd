@@ -44,7 +44,41 @@ N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages
 
 
 ```{r}
+#loading packages
+pacman::p_load(tidyverse, caret)
 
+#function to load and clean data
+read_pitch <- function(filename) {
+  #read data
+  d <- read_delim(paste0("Pitch/",filename), delim = "\t")
+  #parse filename; study, diagnosis, subject, trial
+  vars = str_match(filename,"Study(\\d+)D([01])S(\\d+)T(\\d+)")
+  vars = as.data.frame(t(vars[2:length(vars)]))
+  names(vars) = c("study","diagnosis","subject","trial")
+  #extract descriptors
+  mean <- mean(d$f0)
+  sd <- sd(d$f0)
+  min <- min(d$f0)
+  max <- max(d$f0)
+  median <- median(d$f0)
+  iqr <- IQR(d$f0) #InterQuartile Range
+  mad <- mad(d$f0) #Median absolute deviation
+  range <- max(d$f0) -  min(d$f0)
+  coefvar <- sd(d$f0)/mean(d$f0) #Coefficient variation
+  d <- cbind(vars,data.frame(mean, sd, min, max, median, iqr, mad, coefvar))
+  #combine all this data
+  return(d)
+}
+#using the function
+pitch_data = list.files(path = "Pitch/",pattern = ".txt") %>%
+    purrr::map_df(read_pitch)
+write_csv(pitch_data, "pitch_data.csv")
+
+#fixing the ID-issue
+pitch_data$ID <- paste0(pitch_data$subject, pitch_data$diagnosis)
+
+#making csv file
+#write.csv(pitch_data, "real_clean_data_yes.csv")
 
 
 ```
