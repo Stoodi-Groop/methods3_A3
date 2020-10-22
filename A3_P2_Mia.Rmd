@@ -45,7 +45,7 @@ N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages
 
 ```{r}
 #loading packages
-pacman::p_load(tidyverse, caret)
+pacman::p_load(tidyverse, caret, groupdata2)
 
 #function to load and clean data
 read_pitch <- function(filename) {
@@ -69,17 +69,18 @@ read_pitch <- function(filename) {
   #combine all this data
   return(d)
 }
+
 #using the function
 pitch_data = list.files(path = "Pitch/",pattern = ".txt") %>%
     purrr::map_df(read_pitch)
 write_csv(pitch_data, "pitch_data.csv")
 
 
-# Let's start with the demographic and clinical data
+# geting the demographic and clinical data
 Demo <- read_delim("DemographicData.csv", delim = ";") %>%
   mutate(Partcipant = factor(Participant),
          Study = factor(Study))
-# then duration data
+# then duration data - loading and cleaning
 Duration <- read_delim("Articulation.txt", delim = ",") 
 vars = str_match(Duration$soundname,"Study(\\d+)D([01])S(\\d+)T(\\d+)")
 Duration <- Duration %>% 
@@ -100,6 +101,8 @@ Duration <- Duration %>%
     PauseDuration = PauseDuration
   )
 Duration$PauseDuration[!is.finite(Duration$PauseDuration)] <- NA # or 0
+
+#renaming the pitch data to allow for merging
 Pitch <- read_csv("pitch_data.csv") %>%
   rename(
     Participant = subject,
@@ -110,6 +113,7 @@ Pitch <- read_csv("pitch_data.csv") %>%
     Participant = factor(Participant),
     Study = factor(Study),
     Diagnosis = factor(ifelse(Diagnosis==0,"Control","Schizophrenia")))
+
 # Now we merge them
 d <- merge(Pitch, Duration, all=T)
 d <- merge(d, Demo, all=T)
@@ -127,4 +131,40 @@ write_csv(d,"real_clean_data_yes.csv")
 ```{r}
 df <- read_csv("real_clean_data_yes.csv")
 ```
+
+```{r}
+#making stuff factor
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$ID <- as.factor(df$ID)  
+
+#removing non-danish studies
+df <- df %>% 
+  filter(Study != 5 & Study != 6)
+
+#creating balanced folds 
+df <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+
+
+```
+
+
+
+```{r}
+#NOW WE MAKE THE MODELS :-))) to find the best acoustic features
+m0 <- lme4::lmer(SpeechRate ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m1 <- lme4::lmer(SpeechRate ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m2 <- lme4::lmer(SpokenDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m3 <- lme4::lmer(SpokenDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m4 <- lme4::lmer(sd ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m5 <- lme4::lmer(sd ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m6 <- lme4::lmer(PauseDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m7 <- lme4::lmer(PauseDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+
+anova(m0, m1)
+anova(m2, m3)
+anova(m4, m5)
+anova(m6, m7)
+```
+
+
 
