@@ -108,7 +108,7 @@ logit2prob <- function(logit){
   prob <- odds / (1 + odds)
   return(prob)
 }
-
+hej
 #making predicitve model
 d$pred <- logit2prob(predict(l0))
 
