@@ -1,0 +1,151 @@
+---
+title: "Assignment 3 - Part 2 - Diagnosing Schizophrenia from Voice"
+author: "Riccardo Fusaroli"
+date: "October 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 3 - Part 2 - Diagnosing schizophrenia from voice
+
+In the previous part of the assignment you generated a bunch of "features", that is, of quantitative descriptors of voice in schizophrenia. We then looked at whether we could replicate results from the previous literature.
+We now want to know whether we can automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
+Again, remember that the dataset containst 7 studies and 3 languages. Feel free to only include Danish (Study 1-4) if you feel that adds too much complexity.
+
+Issues to be discussed your report:
+- Should you run the analysis on all languages/studies at the same time? 
+- Choose your best acoustic feature from part 1. How well can you diagnose schizophrenia just using it?
+- Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression.
+- Discuss the "classification" process: which methods are you using? Which confounds should you be aware of? What are the strength and limitation of the analysis?
+- Bonus question: Logistic regression is only one of many classification algorithms. Try using others and compare performance. Some examples: Discriminant Function, Random Forest, Support Vector Machine, etc. The package caret provides them. 
+- Bonus Bonus question: It is possible combine the output of multiple  classification models to improve classification accuracy. For inspiration see,
+https://machinelearningmastery.com/machine-learning-ensembles-with-r/
+ The interested reader might also want to look up 'The BigChaos Solution to the Netflix Grand Prize'
+
+## Learning objectives
+- Learn the basics of classification in a machine learning framework
+- Design, fit and report logistic regressions
+- Apply feature selection techniques
+
+### Let's start
+
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+
+
+```{r}
+pacman::p_load("tidyverse", "lme4", "caret", "boot")
+
+df <- read.csv("real_clean_data_yes.csv")
+
+# install.packages
+install.packages("groupdata2")
+library(groupdata2)
+# df$Pred <- predict(model)
+# df$DiagnosisPred <- as.factor(ifelse(df$Pred<0, "Control", "Schizophrenia"))
+df$ID <- as.factor(df$ID)
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$Study <- as.factor(df$Study)
+
+df <- df %>% 
+  filter(Study != 5 & Study != 6)
+
+d <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+```
+
+```{r}
+#check which acoustic feature is best to work with 
+d <- d %>% 
+  na.omit(d$PauseDuration)
+
+m0 <- lme4::lmer(SpeechRate ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m1 <- lme4::lmer(SpeechRate ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m2 <- lme4::lmer(SpokenDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m3 <- lme4::lmer(SpokenDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m4 <- lme4::lmer(sd ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m5 <- lme4::lmer(sd ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m6 <- lme4::lmer(PauseDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m7 <- lme4::lmer(PauseDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+
+anova(m0, m1)
+anova(m2, m3)
+anova(m4, m5)
+anova(m6, m7)
+AIC(m0, m1, m2, m3, m4, m5, m6, m7) #m6 is the best
+
+```
+
+Making a model using PauseDuration
+```{r}
+l0 <- lme4::glmer(Diagnosis ~ PauseDuration + (1|ID), d, family = binomial) 
+
+l1 <- lme4::glmer(Diagnosis ~ PauseDuration + Study + (1|ID), df, family = binomial) 
+
+l2 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + (1|ID), df, family = binomial) 
+
+l3 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + (1|ID), df, family = binomial) 
+
+l4 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + (1|ID), df, family = binomial) 
+l5 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ + (1|ID), df, family = binomial) 
+
+AIC(l0,l1,l2,l3,l4,l5)
+```
+
+
+```{r}
+#making logit2prob functio n
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+#making predicitve model
+d$pred <- logit2prob(predict(l0))
+
+d$class_prediction <-
+  ifelse(d$pred > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+d$pred = as.factor(d$pred)
+
+d$Diagnosis = as.factor(d$Diagnosis)
+
+confusionMatrix (d = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+
+#sensitivity
+sensitivity(data = d$pred, reference = d$Diagnosis, positive = "Schizophrenia")
+
+#specificity
+specificity(data = d$pred, reference = d$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = d$pred, reference = d$Diagnosis, positive = "Schizophrenia")
+
+#NPV
+negPredValue(data = d$pred, reference = d$Diagnosis, negative = "Control") 
+
+#ROC curve
+
+library(pROC)
+
+rocCurve <- roc(response = d$Diagnosis,   predictor = d$pred)
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+
+
+```
+
