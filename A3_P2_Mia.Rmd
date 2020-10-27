@@ -45,7 +45,7 @@ N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages
 
 ```{r}
 #loading packages
-pacman::p_load(tidyverse, caret, groupdata2)
+pacman::p_load(tidyverse, caret, groupdata2, boot, lme4, pROC)
 
 #function to load and clean data
 read_pitch <- function(filename) {
@@ -166,5 +166,137 @@ anova(m4, m5)
 anova(m6, m7)
 ```
 
+```{r}
+#removing na's
+df <- df %>% 
+  na.omit(d$PauseDuration)
 
+#making model using pause duration which was th ebest acousitc feature
+l0 <- lme4::glmer(Diagnosis ~ PauseDuration + (1|ID), df, family = binomial) 
+
+l1 <- lme4::glmer(Diagnosis ~ PauseDuration + Study + (1|ID), df, family = binomial) 
+
+l2 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + (1|ID), df, family = binomial) 
+
+l3 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + (1|ID), df, family = binomial) 
+
+l4 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + (1|ID), df, family = binomial) 
+l5 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ + (1|ID), df, family = binomial) 
+
+AIC(l0,l1,l2,l3,l4,l5)
+```
+
+```{r}
+#making logit2prob functio n
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+#making predicitve model
+df$pred <- logit2prob(predict(l0, re.form=NA))
+
+#writing in the predictions
+df$class_prediction <-
+  ifelse(df$pred > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+df$Diagnosis <-
+  ifelse(df$Diagnosis == 0,
+         "Control",
+         "Schizo"
+  )
+
+df$pred = as.factor(df$pred)
+
+df$Diagnosis = as.factor(df$Diagnosis)
+
+#looking at the predicted values
+table(df$pred)
+table(df$class_prediction)
+#one value has not been calculated right, so we fix it like this 
+u <- union(df$class_prediction, df$Diagnosis)
+t <- table(factor(df$class_prediction, u), factor(df$Diagnosis, u))
+
+#making confusion matrix 
+confusionMatrix(t, positive = "Schizo")
+
+#making stuff as factor
+df$class_prediction <- as.factor(df$class_prediction)
+class(df$Diagnosis)
+class(df$class_prediction)
+
+#sensitivity
+sensitivity(data = df$class_prediction, reference = df$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = df$class_prediction, reference = df$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = df$class_prediction, reference = df$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = df$class_prediction, reference = df$Diagnosis, negative = "Control") 
+
+
+#ROC curve
+rocCurve <- roc(response = df$Diagnosis,   predictor = as.numeric(df$class_prediction))
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+```
+
+```{r}
+#NOW WE DO IT AGAIN BUT WITH MODEL 5
+
+#making predicitve model
+df$pred2 <- logit2prob(predict(l5, re.form=NA))
+
+#writing in the predictions
+df$class_prediction2 <-
+  ifelse(df$pred2 > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+
+df$pred2 = as.factor(df$pred2)
+
+
+#looking at the predicted values
+table(df$pred2)
+table(df$class_prediction2)
+#one value has not been calculated right, so we fix it like this 
+u <- union(df$class_prediction2, df$Diagnosis)
+t <- table(factor(df$class_prediction2, u), factor(df$Diagnosis, u))
+
+#making confusion matrix 
+confusionMatrix(t, positive = "Schizo")
+
+#making stuff as factor
+df$class_prediction2 <- as.factor(df$class_prediction2)
+
+
+#sensitivity
+sensitivity(data = df$class_prediction2, reference = df$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = df$class_prediction2, reference = df$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = df$class_prediction2, reference = df$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = df$class_prediction2, reference = df$Diagnosis, negative = "Control") 
+
+
+#ROC curve
+rocCurve <- roc(response = df$Diagnosis,   predictor = as.numeric(df$class_prediction2))
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+```
 
