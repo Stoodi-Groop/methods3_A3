@@ -162,7 +162,7 @@ data$V1 <- as.numeric(paste(data$V1))
 data$V2 <- as.numeric(paste(data$V2))
 
 #remove na
-data <- na.omit(data) 
+data <- na.omit(data) #you could consider not doing this but the text tells us to
 
 #filename as factor
 data$filename <- as.factor(data$filename)
@@ -239,6 +239,10 @@ df <- merge(df,artdata)
 #filter out study 5
 df <- filter(df, df$Study != 5)
 
+df$ID <- paste0(df$Participant, df$Diagnosis)
+
+#write to csv
+
 
 ```
 
@@ -283,7 +287,7 @@ study2 %>%
 scz <- df %>% 
   filter(Diagnosis == 1)
 
-unique(df$Participant)
+length(unique(df$ID))
 
 #SANS
 ggplot(scz, aes(x = Study, y = SANS, color = Diagnosis)) +
@@ -322,30 +326,73 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-
+#make everything numeric
 df$ndur <- as.numeric(df$dur..s.)
 df$phonationtime..s. <- as.numeric(df$phonationtime..s.)
 df$npause <- as.numeric(df$npause)
 
-   set.seed(1)
-   x <- runif(df$sdPitch)
-   y <- runif(df$phonationtime..s.)
-   z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
-   æ <- runif(df$speechrate..nsyll.dur.)
+#One way of doing it, but we went for another way except for z (see further below)
+
+#    set.seed(1)
+#    x <- runif(df$sdPitch)
+#    y <- runif(df$phonationtime..s.)
+#    z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+#    æ <- runif(df$speechrate..nsyll.dur.)
+#    
+# 
+#    # Manually scaling
+#    (x - mean(x)) / sd(x)
+#    (y - mean(y)) / sd(y)
+#    (z - mean(z)) / sd(z)
+#    (æ - mean(æ)) / sd(æ)
+# 
+#    scale_sdPitch <- scale(x)
+#    scale_phonationtime <- scale(y)
+#    scale_pause_dur <- scale(z)
+#    scale_speechrate <- scale(æ)
+
+
+#translations for the new columns we need to make
+# pause duration = (ndur - phonationtime / npause)
+# speechrate= speechrate 
+# proportion of spoken time = phonationtime
+# pitch variability = sdPitch
+  
+
+   
+#mutating the scaled measures used in the models   
+df <- df %>%  
+    mutate(speech_rate_scaled = (df$speechrate..nsyll.dur. - mean(df$speechrate..nsyll.dur.)) / sd(df$speechrate..nsyll.dur.), 
+           proportion_spoken_time_scaled =(df$phonationtime..s. - mean(df$phonationtime..s.)/ sd(df$phonationtime..s.)),
+           Pitch_variability_scaled = (df$sdPitch - mean(df$sdPitch)) / sd(df$sdPitch))
+        
+
+#preparing for scaled pause duration column
+     set.seed(1)
+z <- runif((df$dur..s.-df$phonationtime..s.)/df$npause)
+ (z - mean(z)) / sd(z)
+  scale_pause_dur <- scale(z)
+scale_pause_dur
+
+#bind together 
+df <- cbind(df, scale_pause_dur = scale_pause_dur)
+```
+
+
+Now we want to make our models
+
+```{r}
+library(lme4)
+
+#make models
+#0 means that intercept is control group (makes output more interpretable)
+m1 <- lmer(speech_rate_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m2 <- lmer(proportion_spoken_time_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m3 <- lmer(Pitch_variability_scaled ~ 0 + Study*Diagnosis + (1|ID), df)
+m4 <- lmer(scale_pause_dur ~ 0 + Study*Diagnosis + (1|ID), df)
    
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
-   (y - mean(y)) / sd(y)
-   (z - mean(z)) / sd(z)
-   (æ - mean(æ)) / sd(æ)
-
-   scale(x)
-   scale(y)
-   scale_pause_dur <- scale(z)
-   scale(æ)
-   
-   
+summary(m3)
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
