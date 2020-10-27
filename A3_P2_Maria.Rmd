@@ -1,0 +1,369 @@
+---
+title: "Assignment 3 - Part 2 - Diagnosing Schizophrenia from Voice"
+author: "Riccardo Fusaroli"
+date: "October 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 3 - Part 2 - Diagnosing schizophrenia from voice
+
+In the previous part of the assignment you generated a bunch of "features", that is, of quantitative descriptors of voice in schizophrenia. We then looked at whether we could replicate results from the previous literature.
+We now want to know whether we can automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
+Again, remember that the dataset containst 7 studies and 3 languages. Feel free to only include Danish (Study 1-4) if you feel that adds too much complexity.
+
+Issues to be discussed your report:
+- Should you run the analysis on all languages/studies at the same time? 
+- Choose your best acoustic feature from part 1. How well can you diagnose schizophrenia just using it?
+- Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression.
+- Discuss the "classification" process: which methods are you using? Which confounds should you be aware of? What are the strength and limitation of the analysis?
+- Bonus question: Logistic regression is only one of many classification algorithms. Try using others and compare performance. Some examples: Discriminant Function, Random Forest, Support Vector Machine, etc. The package caret provides them. 
+- Bonus Bonus question: It is possible combine the output of multiple  classification models to improve classification accuracy. For inspiration see,
+https://machinelearningmastery.com/machine-learning-ensembles-with-r/
+ The interested reader might also want to look up 'The BigChaos Solution to the Netflix Grand Prize'
+
+## Learning objectives
+- Learn the basics of classification in a machine learning framework
+- Design, fit and report logistic regressions
+- Apply feature selection techniques
+
+### Let's start
+
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+
+
+
+```{r}
+#loading packages
+pacman::p_load(tidyverse, caret, groupdata2, lme4, boot)
+
+#correct way of cleaning as stolen from Byurakn 
+
+# #function to load and clean data
+# read_pitch <- function(filename) {
+#   #read data
+#   d <- read_delim(paste0("Pitch/",filename), delim = "\t")
+#   #parse filename; study, diagnosis, subject, trial
+#   vars = str_match(filename,"Study(\\d+)D([01])S(\\d+)T(\\d+)")
+#   vars = as.data.frame(t(vars[2:length(vars)]))
+#   names(vars) = c("study","diagnosis","subject","trial")
+#   #extract descriptors
+#   mean <- mean(d$f0)
+#   sd <- sd(d$f0)
+#   min <- min(d$f0)
+#   max <- max(d$f0)
+#   median <- median(d$f0)
+#   iqr <- IQR(d$f0) #InterQuartile Range
+#   mad <- mad(d$f0) #Median absolute deviation
+#   range <- max(d$f0) -  min(d$f0)
+#   coefvar <- sd(d$f0)/mean(d$f0) #Coefficient variation
+#   d <- cbind(vars,data.frame(mean, sd, min, max, median, iqr, mad, coefvar))
+#   #combine all this data
+#   return(d)
+# }
+# #using the function
+# pitch_data = list.files(path = "Pitch/",pattern = ".txt") %>%
+#     purrr::map_df(read_pitch)
+# write_csv(pitch_data, "pitch_data.csv")
+# 
+# 
+# # Let's start with the demographic and clinical data
+# Demo <- read_delim("DemographicData.csv", delim = ";") %>%
+#   mutate(Partcipant = factor(Participant),
+#          Study = factor(Study))
+# # then duration data
+# Duration <- read_delim("Articulation.txt", delim = ",") 
+# vars = str_match(Duration$soundname,"Study(\\d+)D([01])S(\\d+)T(\\d+)")
+# Duration <- Duration %>% 
+#   mutate( 
+#     Study = factor(vars[,2]),
+#     Diagnosis = ifelse(vars[,3]==0,"Control","Schizophrenia"),
+#     Participant = factor(as.numeric(vars[,4])),
+#     Trial = vars[,5],
+#     PauseDuration = (as.numeric(` dur (s)`) - as.numeric(` phonationtime (s)`))/as.numeric(` npause`)) %>%
+#   rename(
+#     SyllableN = ` nsyll`,
+#     PauseN = ` npause`,
+#     Duration = ` dur (s)`,
+#     SpokenDuration = ` phonationtime (s)`,
+#     SpeechRate = ` speechrate (nsyll/dur)`,
+#     ArticulationRate = ` articulation rate (nsyll / phonationtime)`,
+#     SyllableDuration = ` ASD (speakingtime/nsyll)`,
+#     PauseDuration = PauseDuration
+#   )
+# Duration$PauseDuration[!is.finite(Duration$PauseDuration)] <- NA # or 0
+# Pitch <- read_csv("pitch_data.csv") %>%
+#   rename(
+#     Participant = subject,
+#     Study = study,
+#     Diagnosis = diagnosis,
+#     Trial = trial) %>%
+#   mutate(
+#     Participant = factor(Participant),
+#     Study = factor(Study),
+#     Diagnosis = factor(ifelse(Diagnosis==0,"Control","Schizophrenia")))
+# # Now we merge them
+# d <- merge(Pitch, Duration, all=T)
+# d <- merge(d, Demo, all=T)
+# d <- d %>% subset(!is.na(Trial))
+# 
+# #fixing the ID-issue
+# d <- d %>% 
+#   mutate(Diagnosis = ifelse(Diagnosis == "Control", "0", "1"))
+# d$ID <- paste0(d$Participant, d$Diagnosis)
+# 
+# # Now we save them
+# write_csv(d,"real_clean_data_yes.csv")
+```
+
+Read in data and make balanced folds according to distributions of ID and diagnosis. 
+
+```{r}
+df <- read_csv("real_clean_data_yes.csv")
+
+#filter for study 1-4 (exclude non-Danish studies)
+df <- df %>% 
+  filter(Study != 5 & Study != 6)
+
+#make as factor
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$Study <- as.factor(df$Study)
+df$ID <- as.factor(df$ID)
+
+#add column with balanced folds
+d <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+
+```
+
+Create the models to find the best acoustic features (speech rate, spoken duration, standard deviation, pause duration). For all, we have used study and diagnosis as predictors, both as fixed effects and interactions.
+
+```{r}
+
+#make models to find the best acoustic features
+m0 <- lme4::lmer(SpeechRate ~ 0 + Study + Diagnosis + (1|ID), d, REML = F)
+m1 <- lme4::lmer(SpeechRate ~ 0 + Study*Diagnosis + (1|ID), d, REML = F)
+m2 <- lme4::lmer(SpokenDuration ~ 0 + Study*Diagnosis + (1|ID), d, REML = F)
+m3 <- lme4::lmer(SpokenDuration ~ 0 + Study + Diagnosis + (1|ID), d, REML = F)
+m4 <- lme4::lmer(sd ~ 0 + Study*Diagnosis + (1|ID), d, REML = F)
+m5 <- lme4::lmer(sd ~ 0 + Study + Diagnosis + (1|ID), d, REML = F)
+m6 <- lme4::lmer(PauseDuration ~ 0 + Study + Diagnosis + (1|ID), d, REML = F)
+m7 <- lme4::lmer(PauseDuration ~ 0 + Study*Diagnosis + (1|ID), d, REML = F)
+
+#compare models
+anova(m0, m1)
+anova(m2, m3)
+anova(m4, m5)
+anova(m6, m7)
+
+#only AIC
+AIC(m0,m1,m2,m3,m4,m5, m6, m7)
+
+```
+When looking at AIC:
+m0 is better than m1
+m3 is better than m2
+m4 is better than m5 (although not for BIC)
+m6 is better than m7
+
+Generally, the models are better without the interaction. 
+
+The best acoustic feature overall is pause duration?
+
+Try logistic regression
+
+```{r}
+d <- d %>% 
+  na.omit(PauseDuration)
+
+#logistic models 
+l0 <- lme4::glmer(Diagnosis ~ PauseDuration + (1|ID), d, family = binomial)
+l1 <- lme4::glmer(Diagnosis ~ PauseDuration + Study + (1|ID), d, family = binomial)
+l2 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + (1|ID), d, family = binomial)
+l3 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + (1|ID), d, family = binomial)
+l4 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + (1|ID), d, family = binomial)
+l5 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ + (1|ID), d, family = binomial)
+
+summary(l0)
+
+AIC(l0,l1,l2,l3,l4,l5)
+
+
+
+
+
+```
+Calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve)
+
+```{r}
+#making logic2prob function
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+#use predict function
+d$pred <- logit2prob(predict(l0, re.form=NA)) #re.form is to fix the perfect dataframe
+
+d$class_prediction <-
+  ifelse(d$pred > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+d$Diagnosis <-
+  ifelse(d$Diagnosis == 0,
+         "Control",
+         "Schizo"
+  )
+
+#make class prediction to factor
+d$class_prediction = as.factor(d$class_prediction)
+
+d$Diagnosis = as.factor(d$Diagnosis)
+
+table(d$pred)
+table(d$class_prediction)
+
+u <- union(d$class_prediction, d$Diagnosis)
+t <- table(factor(d$class_prediction, u), factor(d$Diagnosis, u))
+confusionMatrix(t, positive = "Schizo")
+#everyone is predicted as control, even though 456 are actually schizo 
+
+
+#accuracy
+
+
+#sensitivity
+sensitivity(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = d$class_prediction, reference = d$Diagnosis, negative = "Control")
+
+#PPV
+posPredValue(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = d$class_prediction, reference = d$Diagnosis, negative = "Control")
+
+#ROC curve
+
+library(pROC)
+
+rocCurve <- roc(response = d$Diagnosis, predictor = as.numeric(d$class_prediction))
+auc(rocCurve)
+ci(rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+
+
+```
+
+doing the same for l5
+
+```{r}
+#NOW WE DO IT AGAIN BUT WITH MODEL 5
+
+#making predicitve model
+d$pred2 <- logit2prob(predict(l5, re.form=NA))
+
+#writing in the predictions
+d$class_prediction2 <-
+  ifelse(d$pred2 > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+
+d$pred2 = as.factor(d$pred2)
+
+
+#looking at the predicted values
+table(d$pred2)
+table(d$class_prediction2)
+#one value has not been calculated right, so we fix it like this 
+u <- union(d$class_prediction2, d$Diagnosis)
+t <- table(factor(d$class_prediction2, u), factor(d$Diagnosis, u))
+
+#making confusion matrix 
+confusionMatrix(t, positive = "Schizo")
+
+#making stuff as factor
+d$class_prediction2 <- as.factor(d$class_prediction2)
+
+
+#sensitivity
+sensitivity(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+
+#ROC curve
+rocCurve <- roc(response = d$Diagnosis,   predictor = as.numeric(d$class_prediction2))
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+
+```
+
+
+Cross-validate it
+
+```{r}
+#
+p_load(forcats, hydroGOF, caret, janitor)
+k = 6
+trainRMSE <- rep(NA, k)
+testRMSE <- rep(NA, k)
+
+#make_clean_names(d$.folds)
+
+#folds = createFolds(unique(fulldf$ID), k = k, list = TRUE, returnTrain = FALSE)
+
+folds = forcats::fct_explicit_na(d$.folds)
+i = 1
+for (fold in folds) {
+  train = subset (d, !(ID %in% fold))
+  test = subset (d, ID %in% fold)
+  model = m
+  test$prediction = predict(model, test, allow.new.levels = T)
+  train$prediction = predict(model, train, allow.new.level = T) 
+  trainRMSE[i] = rmse(train$Diagnosis, train$prediction)
+  basic_testRMSE[i] = rmse(test$Diagnosis, test$prediction)
+  i = i + 1
+}
+
+trainRMSE
+testRMSE
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+#visualise the data
+ggplot(d, aes(Diagnosis, PauseDuration, color = Study, shape = Diagnosis)) + geom_jitter(width = .4, height = .4)  
+
+
+```
+
+
