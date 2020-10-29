@@ -43,13 +43,15 @@ N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages
 
 
 ```{r}
-pacman::p_load("tidyverse", "lme4", "caret", "boot")
+pacman::p_load("tidyverse", "lme4", "caret", "boot", "cvms")
 
 df <- read.csv("real_clean_data_yes.csv")
 
 # install.packages
 install.packages("groupdata2")
 library(groupdata2)
+install.packages("cvms")
+library(cvms)
 # df$Pred <- predict(model)
 # df$DiagnosisPred <- as.factor(ifelse(df$Pred<0, "Control", "Schizophrenia"))
 df$ID <- as.factor(df$ID)
@@ -86,18 +88,17 @@ AIC(m0, m1, m2, m3, m4, m5, m6, m7) #m6 is the best
 
 Making a model using PauseDuration
 ```{r}
-l0 <- lme4::glmer(Diagnosis ~ PauseDuration + (1|ID), d, family = binomial) 
+l1 <- glm(Diagnosis ~ PauseDuration, d, family = binomial) 
 
-l1 <- lme4::glmer(Diagnosis ~ PauseDuration + Study + (1|ID), df, family = binomial) 
+l2 <- glm(Diagnosis ~ PauseDuration + Gender, df, family = binomial) 
 
-l2 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + (1|ID), df, family = binomial) 
+l3 <- glm(Diagnosis ~ PauseDuration + Gender + Age, df, family = binomial) 
 
-l3 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + (1|ID), df, family = binomial) 
+l4 <- glm(Diagnosis ~ PauseDuration + Gender + Age + Education, df, family = binomial) 
+l5 <- glm(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ, df, family = binomial) 
 
-l4 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + (1|ID), df, family = binomial) 
-l5 <- lme4::glmer(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ + (1|ID), df, family = binomial) 
-
-AIC(l0,l1,l2,l3,l4,l5)
+AIC(l1,l2,l3,l4,l5)
+#l5 is best, has lowest AIC
 ```
 
 
@@ -108,9 +109,9 @@ logit2prob <- function(logit){
   prob <- odds / (1 + odds)
   return(prob)
 }
-hej
+
 #making predicitve model
-d$pred <- logit2prob(predict(l0))
+d$pred <- logit2prob(predict(l1, re.form=NA))
 
 d$class_prediction <-
   ifelse(d$pred > 0.50,
@@ -118,34 +119,179 @@ d$class_prediction <-
          "Control"
   )
 
-d$pred = as.factor(d$pred)
+d$Diagnosis <-
+  ifelse(d$Diagnosis == 0,
+         "Control",
+         "Schizo"
+  )
 
+d$pred = as.factor(d$pred)
+d$class_prediction <- as.factor(d$class_prediction)
 d$Diagnosis = as.factor(d$Diagnosis)
 
-confusionMatrix (d = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+u <- union(d$class_prediction, d$Diagnosis)
+t <- table(factor(d$class_prediction, u), factor(d$Diagnosis, u))
+
+confusionMatrix (t, positive = "Schizo")
+
 
 
 #sensitivity
-sensitivity(data = d$pred, reference = d$Diagnosis, positive = "Schizophrenia")
+sensitivity(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
 
 #specificity
-specificity(data = d$pred, reference = d$Diagnosis, negative = "Control") 
+specificity(data = d$class_prediction, reference = d$Diagnosis, negative = "Control") 
 
 #PPV
-posPredValue(data = d$pred, reference = d$Diagnosis, positive = "Schizophrenia")
+posPredValue(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
 
 #NPV
-negPredValue(data = d$pred, reference = d$Diagnosis, negative = "Control") 
+negPredValue(data = d$class_prediction, reference = d$Diagnosis, negative = "Control") 
 
 #ROC curve
 
-library(pROC)
+pacman::p_load("pROC")
+d$pred = as.numeric(d$pred)
 
-rocCurve <- roc(response = d$Diagnosis,   predictor = d$pred)
-auc(rocCurve) 
+levels(d$class_prediction)
+rocCurve <- roc(response = d$Diagnosis, predictor = d$class_prediction)
+auc(rocCurve)
 ci (rocCurve)
 plot(rocCurve, legacy.axes = TRUE)
 
 
 ```
 
+
+```{r}
+d$pred2 <- logit2prob(predict(l5, re.form=NA))
+
+d$class_prediction2 <-
+  ifelse(d$pred2 > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+d$class_prediction2 <- as.factor(d$class_prediction2)
+
+
+u2 <- union(d$class_prediction2, d$Diagnosis)
+t2 <- table(factor(d$class_prediction2, u2), factor(d$Diagnosis, u2))
+
+confusionMatrix (t2, positive = "Schizo")
+
+
+
+#sensitivity
+sensitivity(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+#ROC curve
+
+pacman::p_load("pROC")
+d$pred = as.numeric(d$pred)
+
+levels(d$class_prediction)
+rocCurve <- roc(response = d$Diagnosis, predictor = d$class_prediction2)
+auc(rocCurve)
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+```
+cross-validation of model l1 and l5
+
+L1 cross-validation
+```{r}
+CVl1 <- cross_validate(
+      d,
+      formulas = "Diagnosis ~ PauseDuration",
+      family = "binomial",
+      fold_cols = ".folds",
+      REML = FALSE,
+      cutoff = 0.5,
+      positive = "Schizo",
+      metrics = list(),
+)
+
+CVl1
+```
+
+L5 cross-validation
+```{r}
+CVl5 <- cross_validate(
+      d,
+      formulas = "Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ",
+      family = "binomial",
+      fold_cols = ".folds",
+      REML = FALSE,
+      cutoff = 0.5,
+      positive = "Schizo",
+      metrics = list(),
+)
+
+CVl5
+```
+
+Looking at best combinations of acoustic features
+```{r}
+a1 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a2 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a3 <- glm(Diagnosis ~ PauseDuration + SpeechRate + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a4 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a5 <- glm(Diagnosis ~ PauseDuration + SpeechRate + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a6 <- glm(Diagnosis ~ PauseDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a7 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+AIC(a1, a2, a3, a4, a5, a6, a7)
+```
+
+Cross-validation on a2
+```{r}
+CVa2 <- cross_validate(
+      d,
+      formulas = "Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + Gender + Age + Education + VerbalIQ",
+      family = "binomial",
+      fold_cols = ".folds",
+      REML = FALSE,
+      cutoff = 0.5,
+      positive = "Schizo",
+      metrics = list(),
+)
+
+CVa2
+```
+
+
+Some models without anything other than acoustic features
+```{r}
+b1 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + sd, df, family = binomial)
+
+b2 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration, df, family = binomial)
+
+b3 <- glm(Diagnosis ~ PauseDuration + SpeechRate + sd, df, family = binomial)
+
+b4 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + sd, df, family = binomial)
+
+b5 <- glm(Diagnosis ~ PauseDuration + SpeechRate, df, family = binomial)
+
+b6 <- glm(Diagnosis ~ PauseDuration + sd, df, family = binomial)
+
+b7 <- glm(Diagnosis ~ PauseDuration + SpokenDuration, df, family = binomial)
+
+AIC(b1, b2, b3, b4, b5, b6, b7)
+```
+WAAAY worse AICs, naturally. 
