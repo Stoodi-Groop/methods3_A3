@@ -1,0 +1,329 @@
+---
+title: "Assignment 3 - Part 2 - Diagnosing Schizophrenia from Voice"
+author: "Riccardo Fusaroli"
+date: "October 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 3 - Part 2 - Diagnosing schizophrenia from voice
+
+In the previous part of the assignment you generated a bunch of "features", that is, of quantitative descriptors of voice in schizophrenia. We then looked at whether we could replicate results from the previous literature.
+We now want to know whether we can automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
+Again, remember that the dataset containst 7 studies and 3 languages. Feel free to only include Danish (Study 1-4) if you feel that adds too much complexity.
+
+Issues to be discussed your report:
+- Should you run the analysis on all languages/studies at the same time? 
+- Choose your best acoustic feature from part 1. How well can you diagnose schizophrenia just using it?
+- Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression.
+- Discuss the "classification" process: which methods are you using? Which confounds should you be aware of? What are the strength and limitation of the analysis?
+- Bonus question: Logistic regression is only one of many classification algorithms. Try using others and compare performance. Some examples: Discriminant Function, Random Forest, Support Vector Machine, etc. The package caret provides them. 
+- Bonus Bonus question: It is possible combine the output of multiple  classification models to improve classification accuracy. For inspiration see,
+https://machinelearningmastery.com/machine-learning-ensembles-with-r/
+ The interested reader might also want to look up 'The BigChaos Solution to the Netflix Grand Prize'
+
+## Learning objectives
+- Learn the basics of classification in a machine learning framework
+- Design, fit and report logistic regressions
+- Apply feature selection techniques
+
+### Let's start
+
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+
+
+(Andrea)
+```{r}
+library(tidyverse)
+library(groupdata2)
+library(caret)
+
+#Preparing data
+df <- read.csv("real_clean_data_yes.csv")
+df$Diagnosis <- as.factor(df$Diagnosis)
+df$ID <- as.factor(df$ID)
+df$Study <- as.factor(df$Study)
+
+
+#removing study 5 and 6
+df <- df %>% 
+  filter(Study != 5 & Study != 6)
+
+#Creating coloumn with folds 
+d <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+
+
+#Making models: 
+
+library(lme4)
+
+
+#NOW WE MAKE THE MODELS :-))) to find the best acoustic features
+m0 <- lme4::lmer(SpeechRate ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m1 <- lme4::lmer(SpeechRate ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m2 <- lme4::lmer(SpokenDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m3 <- lme4::lmer(SpokenDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m4 <- lme4::lmer(sd ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+m5 <- lme4::lmer(sd ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m6 <- lme4::lmer(PauseDuration ~ 0 + Study + Diagnosis + (1|ID), df, REML = F)
+m7 <- lme4::lmer(PauseDuration ~ 0 + Study*Diagnosis + (1|ID), df, REML = F)
+
+
+AIC(m0,m1,m2,m3,m4,m5,m6,m7) #m6 has the lowest AIC, meaning pauseduration is the best acoustic feature (we will continue with that one then)
+
+
+#removing NAs from pause duration 
+
+d <- d %>% 
+  na.omit(PauseDuration)
+
+#How well can it predict diagnosis? 
+l1 <- glm(Diagnosis ~ PauseDuration, d, family = binomial)
+l2 <- glm(Diagnosis ~ PauseDuration + Gender, d, family = binomial)
+l3 <- glm(Diagnosis ~ PauseDuration + Gender + Age, d, family = binomial)
+l4 <- glm(Diagnosis ~ PauseDuration + Gender + Age + Education, d, family = binomial)
+l5 <- glm(Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ, d, family = binomial)
+
+
+AIC(l1, l2, l3, l4, l5) # l5 is best
+```
+
+Logistic regressions on Pause duration for the simple model l1
+
+(Anna)
+```{r}
+#Making logit2prob function 
+logit2prob <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+
+#Creating coloumn with probabilities. 
+d$pred <- logit2prob(predict(l1, re.form=NA))
+
+
+# Changing names in coloumns to diagnoses. 
+d$class_prediction <-
+  ifelse(d$pred > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+
+
+d$Diagnosis <-
+  ifelse(d$Diagnosis == 0,
+         "Control",
+         "Schizo"
+  )
+
+d$class_prediction <-  as.factor(d$class_prediction)
+
+d$Diagnosis <-  as.factor(d$Diagnosis)
+
+table(d$pred)
+table(d$class_prediction)
+
+u <- union(d$class_prediction, d$Diagnosis)
+t <- table(factor(d$class_prediction, u), factor(d$Diagnosis, u))
+
+#creating a confusion matrix 
+confusionMatrix(t, positive = "Schizo")
+```
+
+Looking at the results from the confusion matrix
+
+(Helle)
+```{r}
+#(A + D)/(A+B+C+D) ≈ 0.67 the proportion of accurate detections
+
+#sensitivity
+sensitivity(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = d$class_prediction, reference = d$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = d$class_prediction, reference = d$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = d$class_prediction, reference = d$Diagnosis, negative = "Control") 
+
+#ROC curve
+
+library(pROC)
+
+rocCurve <- roc(response = d$Diagnosis,   predictor = as.numeric(d$class_prediction))
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+
+
+
+```
+
+Trying with our l5 model as well 
+
+(Maria)
+```{r}
+#NOW WE DO IT AGAIN BUT WITH MODEL 5
+
+#making predicitve model
+d$pred2 <- logit2prob(predict(l5, re.form=NA))
+
+#writing in the predictions
+d$class_prediction2 <-
+  ifelse(d$pred2 > 0.50,
+         "Schizo",
+         "Control"
+  )
+
+
+d$pred2 = as.factor(d$pred2)
+
+
+#looking at the predicted values
+table(d$pred2)
+table(d$class_prediction2)
+#one value has not been calculated right, so we fix it like this 
+u2 <- union(d$class_prediction2, d$Diagnosis)
+t2 <- table(factor(d$class_prediction2, u2), factor(d$Diagnosis, u2))
+
+#making confusion matrix 
+confusionMatrix(t2, positive = "Schizo")
+
+#making stuff as factor
+d$class_prediction2 <- as.factor(d$class_prediction2)
+
+
+#sensitivity
+sensitivity(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#specificity
+specificity(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+#PPV
+posPredValue(data = d$class_prediction2, reference = d$Diagnosis, positive = "Schizo")
+
+#NPV
+negPredValue(data = d$class_prediction2, reference = d$Diagnosis, negative = "Control") 
+
+
+#ROC curve
+rocCurve <- roc(response = d$Diagnosis,   predictor = as.numeric(d$class_prediction2))
+auc(rocCurve) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE)
+```
+
+Cross-validation of our simple model 
+
+(Mia)
+```{r}
+#Cross validation
+
+library(cvms)
+library(caret)
+
+
+# L1 cross-validation
+
+CVl1 <- cross_validate(
+      d,
+      formulas = "Diagnosis ~ PauseDuration",
+      family = "binomial",
+      fold_cols = ".folds",
+      REML = FALSE,
+      cutoff = 0.5,
+      positive = "Schizo",
+      metrics = list(),
+)
+
+CVl1
+
+# accuracy = 0.489
+```
+
+CV for L5
+```{r}
+CVl5 <- cross_validate(d,
+formulas = "Diagnosis ~ PauseDuration + Gender + Age + Education + VerbalIQ",
+family = "binomial",
+positive = "Schizo",
+metrics = list()
+)
+
+CVl5
+
+# accuracy = 0.649
+```
+
+
+Looking at best combinations of acoustic features
+```{r}
+a1 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a2 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a3 <- glm(Diagnosis ~ PauseDuration + SpeechRate + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a4 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a5 <- glm(Diagnosis ~ PauseDuration + SpeechRate + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a6 <- glm(Diagnosis ~ PauseDuration + sd + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+a7 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + Gender + Age + Education + VerbalIQ, df, family = binomial)
+
+AIC(a1, a2, a3, a4, a5, a6, a7) #We're choosing a7
+```
+
+Cross-validation on a7
+```{r}
+CVa7 <- cross_validate(
+      d,
+      formulas = "Diagnosis ~ PauseDuration + SpokenDuration + Gender + Age + Education + VerbalIQ",
+      family = "binomial",
+      fold_cols = ".folds",
+      REML = FALSE,
+      cutoff = 0.5,
+      positive = "Schizo",
+      metrics = list(),
+)
+
+CVa7 # accuracy = 0.663
+```
+
+
+Some models without anything other than acoustic features
+```{r}
+b1 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration + sd, df, family = binomial)
+
+b2 <- glm(Diagnosis ~ PauseDuration + SpeechRate + SpokenDuration, df, family = binomial)
+
+b3 <- glm(Diagnosis ~ PauseDuration + SpeechRate + sd, df, family = binomial)
+
+b4 <- glm(Diagnosis ~ PauseDuration + SpokenDuration + sd, df, family = binomial)
+
+b5 <- glm(Diagnosis ~ PauseDuration + SpeechRate, df, family = binomial)
+
+b6 <- glm(Diagnosis ~ PauseDuration + sd, df, family = binomial)
+
+b7 <- glm(Diagnosis ~ PauseDuration + SpokenDuration, df, family = binomial)
+
+AIC(b1, b2, b3, b4, b5, b6, b7)
+
+# These models are much worse, and we're not going to do anything further with them. 
+
