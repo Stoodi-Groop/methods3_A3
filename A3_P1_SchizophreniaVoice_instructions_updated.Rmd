@@ -121,7 +121,7 @@ read_pitch <- function(filename) {
 }
 
 # test it on just one file while writing the function
-test_data = read_pitch("Pitch/a_file_to_test.txt")
+test_data = read.table("Pitch/Study1D0S101T10_f0.txt")
 
 # when you've created a function that works, you can
 pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
